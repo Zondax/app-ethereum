@@ -3,6 +3,7 @@
 #include "common_ui.h"
 #include "common_utils.h"
 
+#ifndef FEATURE_ETH
 #define ENABLED_STR   "Enabled"
 #define DISABLED_STR  "Disabled"
 #define BUF_INCREMENT (MAX(strlen(ENABLED_STR), strlen(DISABLED_STR)) + 1)
@@ -229,7 +230,7 @@ static void switch_settings_verbose_domain_name(void) {
     toggle_setting(&N_storage.verbose_domain_name, &ux_settings_flow_verbose_domain_name_step);
 }
 #endif  // HAVE_DOMAIN_NAME
-
+#endif
 //////////////////////////////////////////////////////////////////////
 // clang-format off
 #ifdef TARGET_NANOS
