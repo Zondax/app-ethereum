@@ -1,6 +1,5 @@
 import fnmatch
 import os
-import time
 from functools import partial
 from pathlib import Path
 import json
@@ -8,15 +7,16 @@ from typing import Optional
 import pytest
 from eth_account.messages import encode_typed_data
 
+from ragger.backend import BackendInterface
+from ragger.firmware import Firmware
+from ragger.navigator import Navigator, NavInsID
+from ragger.navigator.navigation_scenario import NavigateWithScenario
+
 import client.response_parser as ResponseParser
 from client.utils import recover_message
 from client.client import EthAppClient
 from client.eip712 import InputData
 from client.settings import SettingID, settings_toggle
-
-from ragger.backend import BackendInterface
-from ragger.firmware import Firmware
-from ragger.navigator import Navigator, NavInsID
 
 
 class SnapshotsConfig:
@@ -71,31 +71,17 @@ def get_wallet_addr(client: EthAppClient) -> bytes:
     return WALLET_ADDR
 
 
-def test_eip712_legacy(firmware: Firmware,
-                       backend: BackendInterface,
-                       navigator: Navigator):
+def test_eip712_legacy(backend: BackendInterface, scenario_navigator: NavigateWithScenario):
     app_client = EthAppClient(backend)
 
-    with open(input_files()[0]) as file:
+    with open(input_files()[0], encoding="utf-8") as file:
         data = json.load(file)
-        smsg = encode_typed_data(full_message=data)
-        with app_client.eip712_sign_legacy(BIP32_PATH, smsg.header, smsg.body):
-            moves = []
-            if firmware.device.startswith("nano"):
-                moves += [NavInsID.RIGHT_CLICK]
-                if firmware.device == "nanos":
-                    screens_per_hash = 4
-                else:
-                    screens_per_hash = 2
-                moves += [NavInsID.RIGHT_CLICK] * screens_per_hash * 2
-                moves += [NavInsID.BOTH_CLICK]
-            else:
-                moves += [NavInsID.USE_CASE_REVIEW_TAP] * 2
-                moves += [NavInsID.USE_CASE_REVIEW_CONFIRM]
-            navigator.navigate(moves)
+    smsg = encode_typed_data(full_message=data)
+    with app_client.eip712_sign_legacy(BIP32_PATH, smsg.header, smsg.body):
+        scenario_navigator.review_approve(custom_screen_text="Sign", do_comparison=False)
 
-        vrs = ResponseParser.signature(app_client.response().data)
-        recovered_addr = recover_message(data, vrs)
+    vrs = ResponseParser.signature(app_client.response().data)
+    recovered_addr = recover_message(data, vrs)
 
     assert recovered_addr == get_wallet_addr(app_client)
 
@@ -139,7 +125,6 @@ def eip712_new_common(firmware: Firmware,
                 moves = [NavInsID.RIGHT_CLICK] * 2
             moves += [NavInsID.BOTH_CLICK]
         else:
-            time.sleep(1.5)
             # need to skip the message hash
             if not verbose and filters is None:
                 moves += [NavInsID.USE_CASE_REVIEW_TAP]
@@ -195,12 +180,12 @@ def test_eip712_new(firmware: Firmware,
     assert recovered_addr == get_wallet_addr(app_client)
 
 
-def test_eip712_address_substitution(firmware: Firmware,
-                                     backend: BackendInterface,
-                                     navigator: Navigator,
-                                     default_screenshot_path: Path,
-                                     test_name: str,
-                                     verbose: bool):
+def test_eip712_advanced_filtering(firmware: Firmware,
+                                   backend: BackendInterface,
+                                   navigator: Navigator,
+                                   default_screenshot_path: Path,
+                                   test_name: str,
+                                   verbose: bool):
     global SNAPS_CONFIG
 
     app_client = EthAppClient(backend)
@@ -210,29 +195,88 @@ def test_eip712_address_substitution(firmware: Firmware,
     if verbose:
         test_name += "_verbose"
     SNAPS_CONFIG = SnapshotsConfig(test_name)
-    with open(f"{eip712_json_path()}/address_substitution.json", encoding="utf-8") as file:
-        data = json.load(file)
 
-    app_client.provide_token_metadata("DAI",
-                                      bytes.fromhex(data["message"]["token"][2:]),
-                                      18,
-                                      1)
-
-    challenge = ResponseParser.challenge(app_client.get_challenge().data)
-    app_client.provide_domain_name(challenge,
-                                   "vitalik.eth",
-                                   bytes.fromhex(data["message"]["to"][2:]))
+    data = {
+        "domain": {
+            "chainId": 1,
+            "name": "Advanced test",
+            "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+            "version": "1"
+        },
+        "message": {
+            "with": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            "value_recv": 10000000000000000,
+            "token_send": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "value_send": 24500000000000000000,
+            "token_recv": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "expires": 1714559400,
+        },
+        "primaryType": "Transfer",
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"}
+            ],
+            "Transfer": [
+                {"name": "with", "type": "address"},
+                {"name": "value_recv", "type": "uint256"},
+                {"name": "token_send", "type": "address"},
+                {"name": "value_send", "type": "uint256"},
+                {"name": "token_recv", "type": "address"},
+                {"name": "expires", "type": "uint64"},
+            ]
+        }
+    }
 
     if verbose:
         settings_toggle(firmware, navigator, [SettingID.VERBOSE_EIP712])
         filters = None
     else:
         filters = {
-            "name": "Token test",
+            "name": "Advanced Filtering",
+            "tokens": [
+                {
+                    "addr": "0x6b175474e89094c44da98b954eedeac495271d0f",
+                    "ticker": "DAI",
+                    "decimals": 18,
+                    "chain_id": 1,
+                },
+                {
+                    "addr": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    "ticker": "WETH",
+                    "decimals": 18,
+                    "chain_id": 1,
+                },
+            ],
             "fields": {
-                "amount": "Amount",
-                "token": "Token",
-                "to": "To",
+                "value_send": {
+                    "type": "amount_join_value",
+                    "name": "Send",
+                    "token": 0,
+                },
+                "token_send": {
+                    "type": "amount_join_token",
+                    "token": 0,
+                },
+                "value_recv": {
+                    "type": "amount_join_value",
+                    "name": "Receive",
+                    "token": 1,
+                },
+                "token_recv": {
+                    "type": "amount_join_token",
+                    "token": 1,
+                },
+                "with": {
+                    "type": "raw",
+                    "name": "With",
+                },
+                "expires": {
+                    "type": "datetime",
+                    "name": "Will Expire"
+                },
             }
         }
 

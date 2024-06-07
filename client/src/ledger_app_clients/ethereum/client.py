@@ -106,8 +106,20 @@ class EthAppClient:
                                                                                     filters_count,
                                                                                     sig))
 
-    def eip712_filtering_show_field(self, name: str, sig: bytes):
-        return self._exchange_async(self._cmd_builder.eip712_filtering_show_field(name, sig))
+    def eip712_filtering_amount_join_token(self, token_idx: int, sig: bytes):
+        return self._exchange_async(self._cmd_builder.eip712_filtering_amount_join_token(token_idx,
+                                                                                         sig))
+
+    def eip712_filtering_amount_join_value(self, token_idx: int, name: str, sig: bytes):
+        return self._exchange_async(self._cmd_builder.eip712_filtering_amount_join_value(token_idx,
+                                                                                         name,
+                                                                                         sig))
+
+    def eip712_filtering_datetime(self, name: str, sig: bytes):
+        return self._exchange_async(self._cmd_builder.eip712_filtering_datetime(name, sig))
+
+    def eip712_filtering_raw(self, name: str, sig: bytes):
+        return self._exchange_async(self._cmd_builder.eip712_filtering_raw(name, sig))
 
     def sign(self,
              bip32_path: str,
@@ -146,6 +158,14 @@ class EthAppClient:
                              bip32_path: str = "m/12381/3600/0/0"):
         return self._exchange_async(self._cmd_builder.get_eth2_public_addr(display,
                                                                            bip32_path))
+
+    def perform_privacy_operation(self,
+                                  display: bool = True,
+                                  bip32_path: str = "m/44'/60'/0'/0/0",
+                                  pubkey: bytes = bytes()):
+        return self._exchange(self._cmd_builder.perform_privacy_operation(display,
+                                                                          bip32_path,
+                                                                          pubkey))
 
     def provide_domain_name(self, challenge: int, name: str, addr: bytes) -> RAPDU:
         payload = format_tlv(DomainNameTag.STRUCTURE_TYPE, 3)  # TrustedDomainName
