@@ -606,6 +606,7 @@ parserStatus_e processTx(txContext_t *context,
             PRINTF("result: %d\n", result);
         }
         CATCH_OTHER(e) {
+            (void)e;
             result = USTREAM_FAULT;
         }
         FINALLY {
@@ -622,6 +623,7 @@ parserStatus_e continueTx(txContext_t *context) {
             result = processTxInternal(context);
         }
         CATCH_OTHER(e) {
+            (void)e;
             result = USTREAM_FAULT;
         }
         FINALLY {
