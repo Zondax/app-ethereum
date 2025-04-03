@@ -252,6 +252,7 @@ void handleSetPlugin(uint8_t p1,
                     os_lib_call(params);
                 }
                 CATCH_OTHER(e) {
+                    (void) e;
                     PRINTF("%s external plugin is not present\n", tokenContext->pluginName);
                     memset(tokenContext->pluginName, 0, sizeof(tokenContext->pluginName));
                     THROW(0x6984);
