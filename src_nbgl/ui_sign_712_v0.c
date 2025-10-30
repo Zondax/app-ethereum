@@ -34,7 +34,11 @@ void ui_sign_712_v0(void) {
 
     nbgl_useCaseReview(TYPE_MESSAGE,
                        &pairs_list,
+#ifdef TARGET_APEX_P
+                       &C_Review_48px,
+#else
                        &C_Review_64px,
+#endif
                        TEXT_REVIEW_EIP712,
                        NULL,
                        TEXT_SIGN_EIP712,

@@ -29,7 +29,11 @@ static void ui_warning_contract_data_choice1(bool confirm) {
 
 void ui_warning_contract_data(void) {
     nbgl_useCaseChoice(
+#ifdef TARGET_APEX_P
+        &C_Warning_24px,
+#else
         &C_Warning_64px,
+#endif
         "Security risk detected",
         "It may not be safe to sign this transaction. To continue, you'll need to review the risk.",
         "Back to safety",

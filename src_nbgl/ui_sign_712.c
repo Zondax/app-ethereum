@@ -74,7 +74,11 @@ void ui_712_start(void) {
     buf_idx = 0;
 
     nbgl_useCaseReviewStreamingStart(TYPE_MESSAGE,
+#ifdef TARGET_APEX_P
+                                     &C_Review_48px,
+#else
                                      &C_Review_64px,
+#endif
                                      TEXT_REVIEW_EIP712,
                                      NULL,
                                      message_update);
