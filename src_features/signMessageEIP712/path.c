@@ -529,7 +529,6 @@ end:
  */
 static bool path_advance_in_struct(void) {
     bool end_reached = true;
-    uint8_t *depth = &path_struct->depths[path_struct->depth_count - 1];
     uint8_t fields_count;
 
     if (path_struct == NULL) {
@@ -539,6 +538,11 @@ static bool path_advance_in_struct(void) {
         return false;
     }
     if (path_struct->depth_count > 0) {
+        // Compute the address only once depth_count > 0 is guaranteed: with
+        // depth_count == 0 the unsigned index `depth_count - 1` underflows and
+        // reads out of bounds of `depths` (clang-21 security.ArrayBound). This also
+        // keeps the dereference after the NULL check above.
+        uint8_t *depth = &path_struct->depths[path_struct->depth_count - 1];
         *depth += 1;
         end_reached = (*depth == fields_count);
     }

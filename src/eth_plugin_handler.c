@@ -179,8 +179,13 @@ eth_plugin_result_t eth_plugin_perform_init(uint8_t *contractAddress,
 }
 
 eth_plugin_result_t eth_plugin_call(int method, void *parameter) {
-    ethPluginSharedRW_t pluginRW;
-    ethPluginSharedRO_t pluginRO;
+    // `static` so their addresses do not escape the stack: pluginRW/pluginRO are
+    // stored into `parameter` (the caller's struct) and read by the plugin during
+    // the synchronous dispatch below. With automatic storage the static analyzer
+    // (clang-21 core.StackAddressEscape) flags the dangling reference on return.
+    // eth_plugin_call is never re-entrant, so static storage is safe.
+    static ethPluginSharedRW_t pluginRW;
+    static ethPluginSharedRO_t pluginRO;
     char *alias;
     uint8_t i;
 
