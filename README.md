@@ -16,6 +16,14 @@
     · <a href="https://github.com/LedgerHQ/app-ethereum/issues">Request Feature</a>
     · <a href="https://github.com/LedgerHQ/app-ethereum/issues">Request New Network</a>
   </p>
+<br/>
+
+[![Guidelines](https://img.shields.io/github/actions/workflow/status/LedgerHQ/app-ethereum/guidelines_enforcer.yml?branch=develop&label=Ledger%20Guidelines)](https://github.com/LedgerHQ/app-ethereum/actions/workflows/guidelines_enforcer.yml)
+[![Functional tests](https://img.shields.io/github/actions/workflow/status/LedgerHQ/app-ethereum/build_and_functional_tests.yml?branch=develop&label=Functional%20tests)](https://github.com/LedgerHQ/app-ethereum/actions/workflows/build_and_functional_tests.yml)
+[![codecov](https://codecov.io/gh/LedgerHQ/app-ethereum/graph/badge.svg)](https://codecov.io/gh/LedgerHQ/app-ethereum)
+[![Code style](https://img.shields.io/github/actions/workflow/status/LedgerHQ/app-ethereum/lint-workflow.yml?branch=develop&label=Code%20style)](https://github.com/LedgerHQ/app-ethereum/actions/workflows/lint-workflow.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+<br/>
 </div>
 <br/>
 
@@ -40,7 +48,7 @@
 
 ## About the project
 
-Ethereum wallet application framework for Nano S, Nano S Plus and Nano X.
+Ethereum wallet application framework for Ledger devices.
 Ledger Blue is not maintained anymore, but the app can still be compiled for this target using the branch [`blue-final-release`](https://github.com/LedgerHQ/app-ethereum/tree/blue-final-release).
 
 ## Documentation
@@ -54,9 +62,7 @@ To compile it and load it on a device, please check out our [developer portal](h
 We have the concept of plugins in the ETH app.
 Find the documentations here:
 
-- [Blog Ethereum plugins](https://blog.ledger.com/ethereum-plugins/)
-- [Ethereum application Plugins : Technical Specifications](https://github.com/LedgerHQ/app-ethereum/blob/master/doc/ethapp_plugins.asc)
-- [Plugin guide](https://hackmd.io/300Ukv5gSbCbVcp3cZuwRQ)
+- [Plugin guide](https://ethereum-plugin-sdk.ledger.com)
 - [Boilerplate plugin](https://github.com/LedgerHQ/app-plugin-boilerplate)
 
 ## Quick start guide
@@ -153,6 +159,8 @@ You can choose which device to compile and load for by setting the `BOLOS_SDK` e
 - `BOLOS_SDK=$NANOX_SDK`
 - `BOLOS_SDK=$NANOSP_SDK`
 - `BOLOS_SDK=$STAX_SDK`
+- `BOLOS_SDK=$FLEX_SDK`
+- `BOLOS_SDK=$APEX_P_SDK`
 
 ### Loading on a physical device
 
@@ -211,6 +219,8 @@ The Ethereum app comes with different tests:
 
 ### Functional Tests (Ragger based)
 
+> 📚 **For a comprehensive overview of all tested functionalities, see the [Test Documentation](tests/functional/doc/).**
+
 #### Linux (Ubuntu)
 
 On Linux, you can use [Ledger's VS Code extension](#with-vscode) to run the tests.
@@ -219,23 +229,23 @@ If you prefer not to, open a terminal and follow the steps below.
 Install the tests requirements:
 
 ```shell
-pip install -r tests/ragger/requirements.txt
+pip install -r tests/functional/requirements.txt
 ```
 
 Then you can:
 
-Run the functional tests (here for nanos but available for any device once you have built the binaries):
+Run the functional tests (here for flex but available for any device once you have built the binaries):
 
 ```shell
-pytest tests/ragger/ --tb=short -v --device nanos
+pytest tests/functional/ --tb=short -v --device flex
 ```
 
-Please see the corresponding ducomentation [USAGE](tests/ragger/usage.md)
+Please see the corresponding ducomentation [USAGE](tests/functional/usage.md)
 
 Or run your app directly with Speculos
 
 ```shell
-speculos --model nanos build/nanos/bin/app.elf
+speculos build/flex/bin/app.elf
 ```
 
 #### macOS / Windows

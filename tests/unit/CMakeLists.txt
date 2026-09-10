@@ -1,64 +1,117 @@
 cmake_minimum_required(VERSION 3.10)
+project(unit_tests VERSION 0.1 DESCRIPTION "Unit tests for Ledger Ethereum application" LANGUAGES C)
 
-if(${CMAKE_VERSION} VERSION_LESS 3.10)
-    cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
+if(NOT DEFINED BOLOS_SDK)
+  set(BOLOS_SDK "/opt/ledger-secure-sdk")
+  message(STATUS "BOLOS_SDK not defined, using default: ${BOLOS_SDK}")
+else()
+  message(STATUS "Using BOLOS_SDK: ${BOLOS_SDK}")
 endif()
 
-# project information
-project(unit_tests
-        VERSION 0.1
-	      DESCRIPTION "Unit tests for C project"
-        LANGUAGES C)
+set(SDK_DIR ${BOLOS_SDK})
+include(${SDK_DIR}/cmake/LedgerUT.cmake)
 
+set(APP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../src")
+set(MOCK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mocks")
+set(PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../ethereum-plugin-sdk/src")
 
-# guard against bad build-type strings
-if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "Debug")
+# Find libbsd for BSD string functions (strlcpy, strlcat)
+find_package(PkgConfig)
+if(PkgConfig_FOUND)
+  pkg_check_modules(LIBBSD libbsd)
+endif()
+if(NOT LIBBSD_FOUND)
+  find_path(LIBBSD_INCLUDE_DIR bsd/string.h)
+  find_library(LIBBSD_LIBRARY NAMES bsd)
+  if(LIBBSD_INCLUDE_DIR AND LIBBSD_LIBRARY)
+    set(LIBBSD_FOUND TRUE)
+    set(LIBBSD_INCLUDE_DIRS ${LIBBSD_INCLUDE_DIR})
+    set(LIBBSD_LIBRARIES ${LIBBSD_LIBRARY})
+    message(STATUS "Found libbsd manually: ${LIBBSD_LIBRARY}")
+  else()
+    message(WARNING "libbsd not found - BSD string functions may not be available")
+    set(LIBBSD_INCLUDE_DIRS "")
+    set(LIBBSD_LIBRARIES "")
+  endif()
 endif()
 
-include(CTest)
-ENABLE_TESTING()
+# =============================================================================
+# Shared helper variables – referenced from every tests_*.cmake
+# =============================================================================
 
-# specify C standard
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED True)
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wall -pedantic -g -O0 --coverage")
-
-set(GCC_COVERAGE_LINK_FLAGS "--coverage -lgcov")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${GCC_COVERAGE_LINK_FLAGS}")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${GCC_COVERAGE_LINK_FLAGS}")
-
-# guard against in-source builds
-if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
-  message(FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there. You may need to remove CMakeCache.txt. ")
-endif()
-
-# Fetch cmocka
-find_package(cmocka QUIET)
-include(FetchContent)
-FetchContent_Declare(
-    cmocka
-    GIT_REPOSITORY https://git.cryptomilk.org/projects/cmocka.git
-    GIT_TAG        cmocka-1.1.5
-    GIT_SHALLOW    1
+# Sources compiled into every test binary.
+set(COMMON_SOURCES
+  ${MOCK_DIR}/sdk_stubs.c
+  ${MOCK_DIR}/system_stubs.c
+  ${BOLOS_SDK}/lib_standard_app/format.c
+  ${BOLOS_SDK}/lib_standard_app/read.c
+  ${BOLOS_SDK}/lib_standard_app/write.c
+  ${BOLOS_SDK}/lib_tlv/tlv_library.c
 )
-set(WITH_STATIC_LIB ON CACHE BOOL "CMocka: Build with a static library" FORCE)
-set(WITH_CMOCKERY_SUPPORT OFF CACHE BOOL "CMocka: Install a cmockery header" FORCE)
-set(WITH_EXAMPLES OFF CACHE BOOL "CMocka: Build examples" FORCE)
-set(UNIT_TESTING OFF CACHE BOOL "CMocka: Build with unit testing" FORCE)
-set(PICKY_DEVELOPER OFF CACHE BOOL "CMocka: Build with picky developer flags" FORCE)
-FetchContent_MakeAvailable(cmocka)
 
-add_compile_definitions(TEST DEBUG=0 SKIP_FOR_CMOCKA)
+# Sources for tests that need shared app globals (all non-NO_GLOBALS tests).
+set(COMMON_SOURCES_WITH_GLOBALS
+  ${COMMON_SOURCES}
+  ${MOCK_DIR}/app_globals.c
+)
 
-include_directories(../../src/)
+# Include directories added to every test target.
+set(COMMON_INCLUDE_DIRS
+  ${APP_DIR}
+  ${PLUGIN_DIR}
+  ${APP_DIR}/features/generic_tx_parser
+  ${APP_DIR}/features/provide_erc20_token_information
+  ${APP_DIR}/features/provide_nft_information
+  ${APP_DIR}/features/provide_trusted_name
+  ${APP_DIR}/features/provide_map_entry
+  ${APP_DIR}/features/provide_proxy_info
+  ${APP_DIR}/features/get_public_key
+  ${APP_DIR}/features/sign_tx
+  ${APP_DIR}/features/sign_authorization_eip7702
+  ${APP_DIR}/features/sign_message_eip712
+  ${APP_DIR}/features/get_challenge
+  ${APP_DIR}/features/provide_network_info
+  ${APP_DIR}/nbgl
+  ${APP_DIR}/utils
+  ${MOCK_DIR}
+  ${BOLOS_SDK}/io/include
+  ${BOLOS_SDK}/lib_cxng/include
+  ${BOLOS_SDK}/lib_nbgl/include
+  ${BOLOS_SDK}/lib_lists
+  ${BOLOS_SDK}/lib_standard_app
+  ${BOLOS_SDK}/lib_tlv
+  ${BOLOS_SDK}/lib_alloc
+  ${BOLOS_SDK}/lib_ux_nbgl
+  ${BOLOS_SDK}/lib_u2f/include
+  ${BOLOS_SDK}/include
+  ${LIBBSD_INCLUDE_DIRS}
+)
 
-# add cmocka tests
-add_executable(test_demo tests/demo.c)
+# Compile definitions added to every test target.
+# UT_COMPILE_DEFS_SDK is provided by the SDK but not auto-applied by
+# ledger_unit_tests_add_test(); forward it here so all test targets
+# inherit the full SDK-standard set. HAVE_TRANSACTION_CHECKS is app-specific.
+set(COMMON_COMPILE_DEFS
+  ${UT_COMPILE_DEFS_SDK}
+  HAVE_TRANSACTION_CHECKS
+)
 
-# add src
-add_library(demo SHARED ./demo_tu.c)
+# Link libbsd via link_libraries() so it appears AFTER object files in the link
+# command (GNU ld processes -l flags left-to-right; libraries must come after
+# the objects that reference them).
+if(LIBBSD_LIBRARIES)
+  link_directories(${LIBBSD_LIBRARY_DIRS})
+  link_libraries(bsd)
+endif()
 
-target_link_libraries(test_demo PUBLIC cmocka gcov demo)
+# COMMON_LINK_OPTIONS carries only any remaining raw linker flags (empty for now).
+set(COMMON_LINK_OPTIONS "")
 
-add_test(test_demo test_demo)
+# =============================================================================
+# Test targets (grouped by feature)
+# =============================================================================
+
+# Test sources live in src/; ledger_unit_tests_init() is called there so that
+# CMAKE_CURRENT_SOURCE_DIR resolves to src/ when ledger_unit_tests_add_test()
+# looks up ${NAME}.c.
+add_subdirectory(src)

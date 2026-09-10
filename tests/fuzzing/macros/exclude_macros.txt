@@ -1,0 +1,2 @@
+# The framework defines app_stack_canary in mock/fuzz_runtime.c, so the canary
+# code path in io_legacy can stay compiled in and get covered.

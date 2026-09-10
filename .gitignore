@@ -3,10 +3,18 @@ bin/
 debug/
 build/
 
+# Nano NBGL reversed icon for Home Screen
+glyphs/home_chain_*
+
 # Unit tests and code coverage
 tests/unit/build/
 tests/unit/coverage/
 tests/unit/coverage.*
+
+# Ragger functional coverage (pytest --coverage; output location depends on the cwd)
+coverage*.info
+coverage*_html/
+.ragger_coverage/
 
 # Python
 venv/
@@ -15,3 +23,26 @@ __version__.py
 
 .vscode
 .idea
+
+# Fuzzing
+tests/fuzzing/corpus/
+tests/fuzzing/out/
+tests/fuzzing/CMakeFiles/
+tests/fuzzing/macros/generated/
+# Absolution invariant models are machine-local and regenerated per build
+# (only domain-overrides.txt / zero-symbols.txt are tracked).
+tests/fuzzing/invariants/*.zon
+.fuzz-artifacts/
+
+default.profraw
+default.profdata
+fuzz-*.log
+crash-*
+report.html
+
+# LSP
+.cache/
+compile_commands.json
+
+# Doxygen
+doxygen/

@@ -1,33 +1,54 @@
-#ifndef _COMMON_UI_H_
-#define _COMMON_UI_H_
+#pragma once
 
-#include <stdbool.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include "eip712_v1_ui_logic.h"
+#include "shared_context.h"
+#include "ux.h"
 
 void ui_idle(void);
-void ui_warning_contract_data(void);
+void ui_error_blind_signing(void);
 void ui_display_public_eth2(void);
 void ui_display_privacy_public_key(void);
 void ui_display_privacy_shared_secret(void);
 void ui_display_public_key(const uint64_t *chain_id);
-void ui_sign_712_v0(void);
 void ui_confirm_selector(void);
 void ui_confirm_parameter(void);
-void app_quit(void);
+void ui_display_safe_account(void);
 
 // EIP-191
-void ui_191_start(void);
-void ui_191_switch_to_message(void);
-void ui_191_switch_to_message_end(void);
-void ui_191_switch_to_sign(void);
-void ui_191_switch_to_question(void);
+void ui_191_start(const char *message);
 
 // EIP-712
-void ui_712_start(void);
-void ui_712_switch_to_message(void);
-void ui_712_switch_to_sign(void);
+bool ui_sign_712_v1(e_eip712_filtering_mode filtering_mode);
+bool ui_sign_712_v0(void);
 
-#include "ui_callbacks.h"
-#include <string.h>
+// Generic clear-signing
+bool ui_gcs(void);
+void ui_gcs_cleanup(void);
 
-#endif  // _COMMON_UI_H_
+// EIP-7702
+bool ui_sign_7702_auth(void);
+bool ui_sign_7702_revocation(void);
+void ui_error_no_7702(void);
+void ui_error_no_7702_whitelist(void);
+
+// Swap
+void ui_swap_show_signing(void);
+
+// UI callbacks
+unsigned int io_seproxyhal_touch_tx_ok(void);
+unsigned int io_seproxyhal_touch_tx_cancel(void);
+unsigned int io_seproxyhal_touch_address_ok(void);
+unsigned int io_seproxyhal_touch_address_cancel(void);
+unsigned int io_seproxyhal_touch_signMessage_ok(void);
+unsigned int io_seproxyhal_touch_signMessage_cancel(void);
+unsigned int io_seproxyhal_touch_data_ok(void);
+unsigned int io_seproxyhal_touch_data_cancel(void);
+unsigned int io_seproxyhal_touch_eth2_address_ok(void);
+unsigned int io_seproxyhal_touch_privacy_ok(void);
+unsigned int io_seproxyhal_touch_privacy_cancel(void);
+unsigned int auth_7702_ok_cb(void);
+unsigned int auth_7702_cancel_cb(void);
+
+uint16_t io_seproxyhal_send_status(uint16_t sw, uint32_t tx, bool reset, bool idle);

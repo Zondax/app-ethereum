@@ -19,7 +19,7 @@ ifeq ($(BOLOS_SDK),)
     $(error Environment variable BOLOS_SDK is not set)
 endif
 
-include $(BOLOS_SDK)/Makefile.defines
+include $(BOLOS_SDK)/Makefile.target
 
 ########################################
 #        Mandatory configuration       #
@@ -27,8 +27,6 @@ include $(BOLOS_SDK)/Makefile.defines
 
 ifeq ($(CHAIN),)
     CHAIN = ethereum
-    # Temporary definition to ensure VSCode extension works... To be cleaned later
-    APPNAME = Ethereum
 endif
 
 SUPPORTED_CHAINS = $(shell find makefile_conf/chain/ -type f -name '*.mk'| sed 's/.*\/\(.*\).mk/\1/g' | sort)
@@ -38,47 +36,63 @@ endif
 include ./makefile_conf/chain/$(CHAIN).mk
 
 APPVERSION_M = 1
-APPVERSION_N = 11
+APPVERSION_N = 23
 APPVERSION_P = 0
 APPVERSION = $(APPVERSION_M).$(APPVERSION_N).$(APPVERSION_P)-dev
 
-# Application source files
-APP_SOURCE_PATH += src src_features src_plugins
-ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_STAX TARGET_FLEX))
-    APP_SOURCE_PATH += src_nbgl
-else
-    APP_SOURCE_PATH += src_bagl
+ifneq ($(shell git rev-parse --is-inside-work-tree 2>/dev/null),true)
+    $(error Building requires a git repository (needed for GIT_COMMIT / COPYRIGHT_YEAR))
 endif
+
+ifneq ($(findstring -,$(APPVERSION)),)
+    DEFINES += DEV_VERSION GIT_COMMIT=\"$(shell git rev-parse --short HEAD)\"
+endif
+
+DEFINES += COPYRIGHT_YEAR=\"$(shell git show -s --format=%cd --date=format:%Y HEAD)\"
+
+# Application source files
+APP_SOURCE_PATH += src
 APP_SOURCE_FILES += $(filter-out ./ethereum-plugin-sdk/src/main.c, $(wildcard ./ethereum-plugin-sdk/src/*.c))
 INCLUDES_PATH += ./ethereum-plugin-sdk/src
-APP_SOURCE_FILES += ${BOLOS_SDK}/lib_standard_app/crypto_helpers.c
-APP_SOURCE_FILES += ${BOLOS_SDK}/lib_standard_app/format.c
-INCLUDES_PATH += ${BOLOS_SDK}/lib_standard_app
 
-ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_STAX TARGET_FLEX))
-NETWORK_ICONS_FILE = $(GEN_SRC_DIR)/net_icons.gen.c
-NETWORK_ICONS_DIR = $(shell dirname "$(NETWORK_ICONS_FILE)")
+ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_STAX TARGET_FLEX TARGET_APEX_M TARGET_APEX_P))
+    NETWORK_ICONS_FILE = $(GEN_SRC_DIR)/net_icons.gen.c
+    NETWORK_ICONS_DIR = $(shell dirname "$(NETWORK_ICONS_FILE)")
 
-$(NETWORK_ICONS_FILE):
-	$(shell python3 tools/gen_networks.py "$(NETWORK_ICONS_DIR)")
+    $(NETWORK_ICONS_FILE):
+		python3 tools/gen_networks.py "$(NETWORK_ICONS_DIR)"
 
-APP_SOURCE_FILES += $(NETWORK_ICONS_FILE)
+    APP_SOURCE_FILES += $(NETWORK_ICONS_FILE)
 endif
 
 # Application icons following guidelines:
 # https://developers.ledger.com/docs/embedded-app/design-requirements/#device-icon
-ICON_NANOS = icons/nanos_app_chain_$(CHAIN_ID).gif
 ICON_NANOX = icons/nanox_app_chain_$(CHAIN_ID).gif
 ICON_NANOSP = icons/nanox_app_chain_$(CHAIN_ID).gif
 ICON_STAX = icons/stax_app_chain_$(CHAIN_ID).gif
 ICON_FLEX = icons/flex_app_chain_$(CHAIN_ID).gif
+ICON_APEX_M = icons/apex_app_chain_$(CHAIN_ID).gif
+ICON_APEX_P = icons/apex_app_chain_$(CHAIN_ID).gif
 
 #prepare hsm generation
 ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_STAX TARGET_FLEX))
     DEFINES += ICONGLYPH=C_chain_$(CHAIN_ID)_64px
     DEFINES += ICONBITMAP=C_chain_$(CHAIN_ID)_64px_bitmap
-    DEFINES += ICONGLYPH_SMALL=C_chain_$(CHAIN_ID)
+    DEFINES += ICONHOME=C_chain_$(CHAIN_ID)_64px
+else ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME), TARGET_APEX_M TARGET_APEX_P))
+    DEFINES += ICONGLYPH=C_chain_$(CHAIN_ID)_48px
+    DEFINES += ICONBITMAP=C_chain_$(CHAIN_ID)_48px_bitmap
+    DEFINES += ICONHOME=C_chain_$(CHAIN_ID)_48px
+else ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_NANOX TARGET_NANOS2))
+    DEFINES += ICONGLYPH=C_chain_$(CHAIN_ID)_14px
+    DEFINES += ICONBITMAP=C_chain_$(CHAIN_ID)_14px_bitmap
+
+    ICON_HOME_NANO = glyphs/home_chain_$(CHAIN_ID)_14px.gif
+    DEFINES += ICONHOME=C_home_chain_$(CHAIN_ID)_14px
 endif
+
+# Don't define plugin function in the plugin SDK
+DEFINES += IS_NOT_A_PLUGIN
 
 
 # Application allowed derivation curves.
@@ -94,7 +108,6 @@ CURVE_APP_LOAD_PARAMS += secp256k1
 # and SLIP-0044 standards.
 # If your app needs it, you can specify multiple path by using:
 # `PATH_APP_LOAD_PARAMS = "44'/1'" "45'/1'"`
-PATH_APP_LOAD_PARAMS += "45'" "44'/1'"
 
 # Setting to allow building variant applications
 # - <VARIANT_PARAM> is the name of the parameter which should be set
@@ -105,28 +118,34 @@ PATH_APP_LOAD_PARAMS += "45'" "44'/1'"
 VARIANT_PARAM = CHAIN
 VARIANT_VALUES = $(SUPPORTED_CHAINS)
 
-# Activate dependency only for specific CHAIN
-ifneq ($(CHAIN),ethereum)
-    DEP_APP_LOAD_PARAMS = Ethereum:$(APPVERSION)
-    DEFINES_LIB = USE_LIB_ETHEREUM
-endif
-
 # Enabling DEBUG flag will enable PRINTF and disable optimizations
 #DEBUG = 1
+
+# Enabling DEBUG_OVER_USB flag will enable PRINTF over USB
+# This will force DISABLE_OS_IO_STACK_USE and add USB CDC profile
+# The log can be displayed using a COM port terminal
+# DEBUG_OVER_USB = 1
 
 ########################################
 #     Application custom permissions   #
 ########################################
 # See SDK `include/appflags.h` for the purpose of each permission
 #HAVE_APPLICATION_FLAG_DERIVE_MASTER = 1
-HAVE_APPLICATION_FLAG_GLOBAL_PIN = 1
-HAVE_APPLICATION_FLAG_BOLOS_SETTINGS = 1
-HAVE_APPLICATION_FLAG_LIBRARY = 1
+#HAVE_APPLICATION_FLAG_GLOBAL_PIN = 1
+#HAVE_APPLICATION_FLAG_BOLOS_SETTINGS = 1
+ifeq ($(CHAIN),ethereum)
+    HAVE_APPLICATION_FLAG_LIBRARY = 1
+else
+    # Activate dependency only for specific CHAIN
+    DEP_APP_LOAD_PARAMS = Ethereum:$(APPVERSION)
+    DEFINES_LIB = USE_LIB_ETHEREUM
+endif
 
 ########################################
 # Application communication interfaces #
 ########################################
 ENABLE_BLUETOOTH = 1
+ENABLE_SWAP = 1
 #ENABLE_NFC = 1
 
 ########################################
@@ -141,22 +160,33 @@ ENABLE_NBGL_QRCODE = 1
 ########################################
 # These advanced settings allow to disable some feature that are by
 # default enabled in the SDK `Makefile.standard_app`.
-DISABLE_STANDARD_APP_FILES = 1
+#DISABLE_STANDARD_APP_FILES = 1
 #DISABLE_DEFAULT_IO_SEPROXY_BUFFER_SIZE = 1 # To allow custom size declaration
 #DISABLE_STANDARD_APP_DEFINES = 1 # Will set all the following disablers
 #DISABLE_STANDARD_SNPRINTF = 1
 #DISABLE_STANDARD_USB = 1
 #DISABLE_STANDARD_WEBUSB = 1
-#DISABLE_STANDARD_BAGL_UX_FLOW = 1
 #DISABLE_DEBUG_LEDGER_ASSERT = 1
 #DISABLE_DEBUG_THROW = 1
 
 ########################################
+#            Stack protector           #
+########################################
+ENABLE_STACK_PROTECTOR = 1
+
+########################################
 #        Main app configuration        #
 ########################################
+ENABLE_NBGL_FOR_NANO_DEVICES = 1
+ENABLE_PKI_LIBRARY = 1
+ENABLE_DYNAMIC_ALLOC = 1
+ENABLE_TLV_LIBRARY = 1
+ENABLE_LISTS_LIBRARY = 1
+ENABLE_ADDRESS_BOOK = 1
+ENABLE_ADDRESS_BOOK_LEDGER_ACCOUNT = 1
+ENABLE_LINK_TIME_OPTIMIZATION = 1
 
-DEFINES += CHAINID_COINNAME=\"$(TICKER)\" CHAIN_ID=$(CHAIN_ID)
-DEFINES += BUILD_YEAR=\"$(shell date +%Y)\"
+DEFINES += APP_TICKER=\"$(TICKER)\" APP_CHAIN_ID=$(CHAIN_ID) APP_COIN_TYPE=$(COIN_TYPE)
 
 # Enabled Features #
 include makefile_conf/features.mk

@@ -1,79 +1,108 @@
 from enum import Enum, auto
-from ragger.firmware import Firmware
-from ragger.navigator import Navigator, NavInsID, NavIns
-from typing import Union
+
+from ledgered.devices import Device, DeviceType
+from ragger.navigator import Navigator, NavIns, NavInsID
 
 
 class SettingID(Enum):
+    TRANSACTION_CHECKS = auto()
     BLIND_SIGNING = auto()
-    DEBUG_DATA = auto()
     NONCE = auto()
     VERBOSE_EIP712 = auto()
-    VERBOSE_ENS = auto()
+    DEBUG_DATA = auto()
+    EIP7702 = auto()
+    DISPLAY_HASH = auto()
 
 
-def get_device_settings(device: str) -> list[SettingID]:
-    if device == "nanos":
-        return [
-            SettingID.BLIND_SIGNING,
-            SettingID.DEBUG_DATA,
-            SettingID.NONCE
-        ]
-    if device in ("nanox", "nanosp", "stax", "flex"):
-        return [
-            SettingID.BLIND_SIGNING,
-            SettingID.DEBUG_DATA,
-            SettingID.NONCE,
-            SettingID.VERBOSE_EIP712,
-            SettingID.VERBOSE_ENS
-        ]
-    return []
+# Settings Positions per device. Returns the tuple (page, x, y)
+SETTINGS_POSITIONS = {
+    DeviceType.STAX: {
+        SettingID.TRANSACTION_CHECKS: (0, 350, 130),
+        SettingID.BLIND_SIGNING: (0, 350, 335),
+        SettingID.NONCE: (1, 350, 130),
+        SettingID.VERBOSE_EIP712: (1, 350, 270),
+        SettingID.DEBUG_DATA: (1, 350, 445),
+        SettingID.EIP7702: (2, 350, 130),
+        SettingID.DISPLAY_HASH: (2, 350, 335),
+    },
+    DeviceType.FLEX: {
+        SettingID.TRANSACTION_CHECKS: (0, 420, 130),
+        SettingID.BLIND_SIGNING: (0, 420, 350),
+        SettingID.NONCE: (1, 420, 130),
+        SettingID.VERBOSE_EIP712: (1, 420, 270),
+        SettingID.DEBUG_DATA: (2, 420, 140),
+        SettingID.EIP7702: (2, 420, 270),
+        SettingID.DISPLAY_HASH: (3, 420, 130),
+    },
+    DeviceType.APEX_P: {
+        SettingID.TRANSACTION_CHECKS: (0, 260, 90),
+        SettingID.BLIND_SIGNING: (0, 260, 235),
+        SettingID.NONCE: (1, 260, 90),
+        SettingID.VERBOSE_EIP712: (1, 260, 190),
+        SettingID.DEBUG_DATA: (2, 260, 90),
+        SettingID.EIP7702: (2, 260, 190),
+        SettingID.DISPLAY_HASH: (3, 260, 90),
+    },
+    DeviceType.APEX_M: {
+        SettingID.TRANSACTION_CHECKS: (0, 260, 90),
+        SettingID.BLIND_SIGNING: (0, 260, 235),
+        SettingID.NONCE: (1, 260, 90),
+        SettingID.VERBOSE_EIP712: (1, 260, 190),
+        SettingID.DEBUG_DATA: (2, 260, 90),
+        SettingID.EIP7702: (2, 260, 190),
+        SettingID.DISPLAY_HASH: (3, 260, 90),
+    },
+}
 
 
-def get_setting_per_page(device: str) -> int:
-    if device == "stax":
-        return 3
-    return 2
+# The order of the settings is important, as it is used to navigate
+def get_device_settings(device: Device) -> list[SettingID]:
+    """Get the list of settings available on the device"""
+    all_settings = []
+    if not device.is_nano:
+        all_settings.append(SettingID.TRANSACTION_CHECKS)
+    all_settings += [
+        SettingID.BLIND_SIGNING,
+        SettingID.NONCE,
+        SettingID.VERBOSE_EIP712,
+        SettingID.DEBUG_DATA,
+        SettingID.EIP7702,
+        SettingID.DISPLAY_HASH,
+    ]
+    return all_settings
 
 
-def get_setting_position(device: str, setting: Union[NavInsID, SettingID]) -> tuple[int, int]:
-    settings_per_page = get_setting_per_page(device)
-    if device == "stax":
-        screen_height = 672  # px
-        header_height = 85  # px
-        footer_height = 132  # px
-        option_offset = 350  # px
-    else:
-        screen_height = 600  # px
-        header_height = 92  # px
-        footer_height = 97  # px
-        option_offset = 420  # px
-    usable_height = screen_height - (header_height + footer_height)
-    setting_height = usable_height // settings_per_page
-    index_in_page = get_device_settings(device).index(SettingID(setting)) % settings_per_page
-    return option_offset, header_height + (setting_height * index_in_page) + (setting_height // 2)
-
-
-def settings_toggle(fw: Firmware, nav: Navigator, to_toggle: list[SettingID]):
-    moves: list[Union[NavIns, NavInsID]] = list()
-    settings = get_device_settings(fw.device)
-    # Assume the app is on the home page
-    if fw.device.startswith("nano"):
-        moves += [NavInsID.RIGHT_CLICK] * 2
-        moves += [NavInsID.BOTH_CLICK]
+def get_settings_moves(device: Device, to_toggle: list[SettingID]) -> list[NavIns | NavInsID]:
+    """Get the navigation instructions to toggle the settings"""
+    moves: list[NavIns | NavInsID] = []
+    settings = get_device_settings(device)
+    # Assume the app is on the 1st page of Settings
+    if device.is_nano:
+        moves += [NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
         for setting in settings:
             if setting in to_toggle:
                 moves += [NavInsID.BOTH_CLICK]
             moves += [NavInsID.RIGHT_CLICK]
         moves += [NavInsID.BOTH_CLICK]  # Back
     else:
+        current_page = 0
         moves += [NavInsID.USE_CASE_HOME_SETTINGS]
-        settings_per_page = get_setting_per_page(fw.device)
         for setting in settings:
-            setting_idx = settings.index(setting)
-            if (setting_idx > 0) and (setting_idx % settings_per_page) == 0:
-                moves += [NavInsID.USE_CASE_SETTINGS_NEXT]
             if setting in to_toggle:
-                moves += [NavIns(NavInsID.TOUCH, get_setting_position(fw.device, setting))]
+                page, x, y = SETTINGS_POSITIONS[device.type][setting]
+                moves += [NavInsID.USE_CASE_SETTINGS_NEXT] * (page - current_page)
+                moves += [NavIns(NavInsID.TOUCH, (x, y))]
+                if setting == SettingID.TRANSACTION_CHECKS:
+                    # Assume Opt-In is not done, Add a confirmation step
+                    moves += [NavInsID.USE_CASE_CHOICE_CONFIRM]
+                    # Dismiss the notification
+                    moves += [NavInsID.TAPPABLE_CENTER_TAP]
+                current_page = page
         moves += [NavInsID.USE_CASE_SETTINGS_MULTI_PAGE_EXIT]
-    nav.navigate(moves, screen_change_before_first_instruction=False)
+    return moves
+
+
+def settings_toggle(device: Device, navigator: Navigator, to_toggle: list[SettingID]):
+    """Toggle the settings"""
+    moves = get_settings_moves(device, to_toggle)
+    navigator.navigate(moves, screen_change_before_first_instruction=False)

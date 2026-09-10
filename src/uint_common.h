@@ -15,10 +15,7 @@
  *  limitations under the License.
  ********************************************************************************/
 
-// Adapted from https://github.com/calccrypto/uint256_t
-
-#ifndef _UINT_COMMON_H_
-#define _UINT_COMMON_H_
+#pragma once
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -29,10 +26,3 @@
 #define LOWER_P(x) x->elements[1]
 #define UPPER(x)   x.elements[0]
 #define LOWER(x)   x.elements[1]
-
-void write_u64_be(uint8_t *const buffer, uint64_t value);
-void read_u64_be(const uint8_t *const in, uint64_t *const out);
-uint64_t readUint64BE(const uint8_t *const buffer);
-void reverseString(char *const str, uint32_t length);
-
-#endif  //_UINT_COMMON_H_

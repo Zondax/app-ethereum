@@ -1,49 +1,71 @@
-#ifndef _SHARED_CONTEXT_H_
-#define _SHARED_CONTEXT_H_
+#pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-
-#include "os.h"
-#include "cx.h"
-#include "ethUstream.h"
-#include "tx_content.h"
-#include "chainConfig.h"
-#include "asset_info.h"
-#ifdef HAVE_NBGL
-#include "nbgl_types.h"
-#endif
-
-#define MAX_BIP32_PATH 10
-
-#define SELECTOR_LENGTH 4
+#include "bip32_utils.h"
+#include "eth_ustream.h"
+#include "chain_config.h"
+#include "swap_utils.h"
+#include "main_std_app.h"
+#include "eth_plugin_interface.h"
+#include "caller_app.h"
 
 #define PLUGIN_ID_LENGTH 30
 
+// Maximum number of plugin-driven items that can be added to the transaction review.
+// The review builder counts pluginUiMaxItems plus up to 3 fixed pairs (From, Network,
+// Max fees) into a uint8_t (g_pairsList->nbPairs and the cast at ui_pairs_init).
+// Bound the source so the sum never overflows the 8-bit pair counter.
+#define MAX_PLUGIN_UI_ITEMS (UINT8_MAX - 3)
+
+// Address length
+#define ADDRESS_LENGTH_HEX     (ADDRESS_LENGTH * 2)      // 2 hex chars per byte
+#define ADDRESS_LENGTH_STR     (ADDRESS_LENGTH_HEX + 1)  // + '\0'
+#define ADDRESS_LENGTH_HEX_STR (ADDRESS_LENGTH_STR + 2)  // with '0x' prefix
+
+// Cryptographic key and signature sizes
+#define PRIVATE_KEY_LENGTH 64  // Private key material buffer size
+
+// ECDSA signature sizes
+#define ETHEREUM_SIGNATURE_V_BASE 27  // Base recovery ID for Ethereum signatures (pre-EIP-155)
+#define ECDSA_SIGNATURE_LENGTH    65  // Total ECDSA signature size: v (1) + r (32) + s (32)
+
+// BLS12-381 key sizes (ETH2 Beacon Chain specification)
+#define BLS12381_G1_COMPRESSED_PUBKEY_LENGTH    48  // ETH2 validator public key (standard)
+#define BLS12381_G1_UNCOMPRESSED_PUBKEY_LENGTH  96  // Uncompressed G1 point (rarely used)
+#define BLS12381_G2_COMPRESSED_SIGNATURE_LENGTH 96  // ETH2 signature size
+
 #define N_storage (*(volatile internalStorage_t *) PIC(&N_storage_real))
-
-#define MAX_ASSETS 5
-
-typedef struct bip32_path_t {
-    uint8_t length;
-    uint32_t path[MAX_BIP32_PATH];
-} bip32_path_t;
 
 typedef struct internalStorage_t {
     bool dataAllowed;
     bool contractDetails;
     bool displayNonce;
-#ifdef HAVE_EIP712_FULL_SUPPORT
     bool verbose_eip712;
-#endif  // HAVE_EIP712_FULL_SUPPORT
-#ifdef HAVE_DOMAIN_NAME
-    bool verbose_domain_name;
-#endif  // HAVE_DOMAIN_NAME
+#ifdef HAVE_TRANSACTION_CHECKS
+    bool tx_check_enable;
+    // hidden setting (not shown in the UI)
+    bool tx_check_opt_in;
+#endif
+    uint8_t gating_counter;
+    bool eip7702_enable;
+    bool displayHash;
     bool initialized;
 } internalStorage_t;
 
+// Sentinel for tokenContext_t.pluginChainId meaning "registration is not bound
+// to a specific chain" (used by paths whose signed metadata does not carry a
+// chain_id). All real EVM chain IDs are > 0.
+#define PLUGIN_CHAIN_ID_ANY 0
+
+typedef enum {
+    PLUGIN_CTX_ADDR_SEL,  // contractAddress/methodSelector are valid (pre-INIT_CONTRACT)
+    PLUGIN_CTX_PLUGIN,    // pluginContext is active (post-INIT_CONTRACT)
+} plugin_ctx_mode_t;
+
 typedef struct tokenContext_t {
     char pluginName[PLUGIN_ID_LENGTH];
+
+    const uint8_t *token_lookup1;
+    const uint8_t *token_lookup2;
 
     uint8_t data[INT256_LENGTH];
     uint16_t fieldIndex;
@@ -53,19 +75,25 @@ typedef struct tokenContext_t {
     uint8_t pluginUiCurrentItem;
     uint8_t pluginUiState;
 
+    // Discriminates the anonymous union below.
+    plugin_ctx_mode_t plugin_ctx_mode;
+
     union {
         struct {
             uint8_t contractAddress[ADDRESS_LENGTH];
-            uint8_t methodSelector[SELECTOR_LENGTH];
+            uint8_t methodSelector[CALLDATA_SELECTOR_SIZE];
         };
         // This needs to be strictly 4 bytes aligned since pointers to it will be casted as
         // plugin context struct pointers (structs that contain up to 4 bytes wide elements)
-        // uint8_t pluginContext[5 * INT256_LENGTH] __attribute__((aligned(4)));
-        // TODO: use PLUGIN_CONTEXT_SIZE after eth is released with the updated plugin sdk
-        uint8_t pluginContext[10 * INT256_LENGTH] __attribute__((aligned(4)));
+        uint8_t pluginContext[PLUGIN_CONTEXT_SIZE] __attribute__((aligned(4)));
     };
 
     uint8_t pluginStatus;
+
+    // Chain ID the plugin registration was issued for. Populated from the
+    // signed SET_PLUGIN payload so we can refuse to activate the plugin on a
+    // transaction whose chain_id differs.
+    uint64_t pluginChainId;
 
 } tokenContext_t;
 
@@ -73,7 +101,7 @@ _Static_assert((offsetof(tokenContext_t, pluginContext) % 4) == 0, "Plugin conte
 
 typedef struct publicKeyContext_t {
     cx_ecfp_public_key_t publicKey;
-    char address[41];
+    char address[ADDRESS_LENGTH_STR];
     uint8_t chainCode[INT256_LENGTH];
     bool getChaincode;
 } publicKeyContext_t;
@@ -81,41 +109,51 @@ typedef struct publicKeyContext_t {
 typedef struct transactionContext_t {
     bip32_path_t bip32;
     uint8_t hash[INT256_LENGTH];
-    union extraInfo_t extraInfo[MAX_ASSETS];
-    bool assetSet[MAX_ASSETS];
-    uint8_t currentAssetIndex;
+    uint8_t sign_mode;  // e_sign_mode captured at P1_FIRST, pinned for the lifetime of the flow
 } transactionContext_t;
 
 typedef struct messageSigningContext_t {
     bip32_path_t bip32;
     uint8_t hash[INT256_LENGTH];
-    uint32_t remainingLength;
 } messageSigningContext_t;
 
 typedef struct messageSigningContext712_t {
     bip32_path_t bip32;
-    uint8_t domainHash[32];
-    uint8_t messageHash[32];
+    uint8_t domainHash[INT256_LENGTH];
+    uint8_t messageHash[INT256_LENGTH];
 } messageSigningContext712_t;
+
+typedef struct authSigningContext7702_t {
+    bip32_path_t bip32;
+    uint8_t authHash[INT256_LENGTH];
+} authSigningContext7702_t;
 
 typedef union {
     publicKeyContext_t publicKeyContext;
     transactionContext_t transactionContext;
     messageSigningContext_t messageSigningContext;
     messageSigningContext712_t messageSigningContext712;
+    authSigningContext7702_t authSigningContext7702;
 } tmpCtx_t;
 
 typedef union {
     txContent_t txContent;
-    cx_sha256_t sha2;
-    char tmp[100];
 } tmpContent_t;
 
 typedef union {
     tokenContext_t tokenContext;
 } dataContext_t;
 
-typedef enum { APP_STATE_IDLE, APP_STATE_SIGNING_TX, APP_STATE_SIGNING_MESSAGE } app_state_t;
+typedef enum {
+    APP_STATE_IDLE,
+    APP_STATE_VERIFYING_ADDRESS,
+    APP_STATE_PERFORMING_PRIVACY_OP,
+    APP_STATE_SIGNING_TX,
+    APP_STATE_SIGNING_MESSAGE,
+    APP_STATE_PREPARING_EIP712,  // STRUCT_DEF received, UI not yet started
+    APP_STATE_SIGNING_EIP712,
+    APP_STATE_SIGNING_EIP7702,
+} app_state_t;
 
 typedef enum {
     CONTRACT_NONE,
@@ -123,27 +161,27 @@ typedef enum {
     CONTRACT_ALLOWANCE,
 } contract_call_t;
 
-// must be able to hold in decimal up to : floor(MAX_UINT64 / 2) - 36
+// EIP-2681
+#define NONCE_STRING_MAX_SIZE 20
+
+// EIP-2294
 #define NETWORK_STRING_MAX_SIZE 19
 
 typedef struct txStringProperties_s {
-    char fullAddress[43];
-    char fullAmount[79];  // 2^256 is 78 digits long
+    char fromAddress[ADDRESS_LENGTH_HEX_STR];
+    uint8_t fromAddressRaw[ADDRESS_LENGTH];
+    char toAddress[ADDRESS_LENGTH_HEX_STR];
+    char fullAmount[MAX_TICKER_LEN + 1 + 78 + 1];  // 2^256 is 78 digits long
     char maxFee[50];
-    char nonce[8];  // 10M tx per account ought to be enough for everybody
+    char nonce[NONCE_STRING_MAX_SIZE + 1];
     char network_name[NETWORK_STRING_MAX_SIZE + 1];
+    char tx_hash[2 + (INT256_LENGTH * 2) + 1];
 } txStringProperties_t;
 
-#ifdef TARGET_NANOS
-#define SHARED_CTX_FIELD_1_SIZE 100
-#else
-#define SHARED_CTX_FIELD_1_SIZE 256
-#endif
-#define SHARED_CTX_FIELD_2_SIZE 40
+#define SHARED_CTX_FIELD_1_SIZE 380
 
 typedef struct strDataTmp_s {
     char tmp[SHARED_CTX_FIELD_1_SIZE];
-    char tmp2[SHARED_CTX_FIELD_2_SIZE];
 } strDataTmp_t;
 
 typedef union {
@@ -151,24 +189,39 @@ typedef union {
     strDataTmp_t tmp;
 } strings_t;
 
-extern const chain_config_t *chainConfig;
+extern const caller_app_t *g_caller_app;
+extern const chain_config_t *g_chain_config;
 
 extern tmpCtx_t tmpCtx;
 extern txContext_t txContext;
 extern tmpContent_t tmpContent;
 extern dataContext_t dataContext;
 extern strings_t strings;
-extern cx_sha3_t global_sha3;
 extern const internalStorage_t N_storage_real;
 
-extern bool G_called_from_swap;
-extern bool G_swap_response_ready;
+typedef enum swap_mode_e {
+    SWAP_MODE_STANDARD,
+    SWAP_MODE_CROSSCHAIN_PENDING_CHECK,
+    SWAP_MODE_CROSSCHAIN_SUCCESS,
+    SWAP_MODE_ERROR,
+} swap_mode_t;
+
+extern swap_mode_t G_swap_mode;
+extern uint8_t *G_swap_crosschain_hash;
 
 typedef enum {
-    EXTERNAL,     //  External plugin, set by setExternalPlugin.
-    ERC721,       // Specific ERC721 internal plugin, set by setPlugin.
-    ERC1155,      // Specific ERC1155 internal plugin, set by setPlugin
-    OLD_INTERNAL  // Old internal plugin, not set by any command.
+    PLUGIN_TYPE_NONE = 0,
+    // External plugin, set by set_external_plugin
+    PLUGIN_TYPE_EXTERNAL,
+    // Specific SWAP_WITH_CALLDATA internal plugin
+    // set as fallback when started if calldata is provided in swap mode
+    PLUGIN_TYPE_SWAP_WITH_CALLDATA,
+    // Specific ERC721 internal plugin, set by set_plugin
+    PLUGIN_TYPE_ERC721,
+    // Specific ERC1155 internal plugin, set by set_plugin
+    PLUGIN_TYPE_ERC1155,
+    // Old internal plugin, not set by any command
+    PLUGIN_TYPE_OLD_INTERNAL,
 } pluginType_t;
 
 extern pluginType_t pluginType;
@@ -178,7 +231,6 @@ extern uint8_t appState;
 extern uint32_t eth2WithdrawalIndex;
 #endif
 
+void app_quit(void);
 void reset_app_context(void);
 const uint8_t *parseBip32(const uint8_t *dataBuffer, uint8_t *dataLength, bip32_path_t *bip32);
-
-#endif  // _SHARED_CONTEXT_H_

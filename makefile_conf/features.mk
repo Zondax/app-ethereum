@@ -1,15 +1,15 @@
 # Activate requested features
 # ---------------------------
-# Enables direct data signing without having to specify it in the settings. Useful when testing with speculos.
-ALLOW_DATA ?= 0
-ifneq ($(ALLOW_DATA),0)
-    DEFINES += HAVE_ALLOW_DATA
-endif
-
-# Bypass the signature verification for setExternalPlugin, setPlugin, provideERC20TokenInfo and provideNFTInfo calls
+# Bypass the signature verification for set_external_plugin, set_plugin, provide_erc20_token_information and provide_nft_information calls
 BYPASS_SIGNATURES ?= 0
 ifneq ($(BYPASS_SIGNATURES),0)
     DEFINES += HAVE_BYPASS_SIGNATURES
+endif
+
+# Bypass the challenge verification
+CHALLENGE_NO_CHECK ?= 0
+ifneq ($(CHALLENGE_NO_CHECK),0)
+    DEFINES += HAVE_CHALLENGE_NO_CHECK
 endif
 
 # Enable the SET_PLUGIN test key
@@ -19,27 +19,14 @@ ifneq ($(SET_PLUGIN_TEST_KEY),0)
 endif
 
 # NFTs
-ifneq ($(TARGET_NAME),TARGET_NANOS)
-    DEFINES	+= HAVE_NFT_SUPPORT
-    NFT_TEST_KEY ?= 0
-    ifneq ($(NFT_TEST_KEY),0)
-        DEFINES += HAVE_NFT_TEST_KEY
-    endif
-    NFT_STAGING_KEY ?= 0
-    ifneq ($(NFT_STAGING_KEY),0)
-        # Key used by the staging backend
-        DEFINES += HAVE_NFT_STAGING_KEY
-    endif
+NFT_TEST_KEY ?= 0
+ifneq ($(NFT_TEST_KEY),0)
+    DEFINES += HAVE_NFT_TEST_KEY
 endif
-
-# Dynamic memory allocator
-ifneq ($(TARGET_NAME),TARGET_NANOS)
-    DEFINES += HAVE_DYN_MEM_ALLOC
-endif
-
-# EIP-712
-ifneq ($(TARGET_NAME),TARGET_NANOS)
-    DEFINES	+= HAVE_EIP712_FULL_SUPPORT
+NFT_STAGING_KEY ?= 0
+ifneq ($(NFT_STAGING_KEY),0)
+    # Key used by the staging backend
+    DEFINES += HAVE_NFT_STAGING_KEY
 endif
 
 # CryptoAssetsList key
@@ -54,12 +41,22 @@ ifneq ($(CAL_STAGING_KEY),0)
     DEFINES += HAVE_CAL_STAGING_KEY
 endif
 
-# ENS
-ifneq ($(TARGET_NAME),TARGET_NANOS)
-    DEFINES += HAVE_DOMAIN_NAME
-    DOMAIN_NAME_TEST_KEY ?= 0
-    ifneq ($(DOMAIN_NAME_TEST_KEY),0)
-        DEFINES += HAVE_DOMAIN_NAME_TEST_KEY
+# Transaction Checks
+# TODO: remove this check once the Transaction checks are implemented on all targets
+ifeq ($(TARGET_NAME),$(filter $(TARGET_NAME),TARGET_STAX TARGET_FLEX TARGET_APEX_M TARGET_APEX_P))
+    DEFINES	+= HAVE_TRANSACTION_CHECKS
+endif
+
+
+EIP7702_TEST_WHITELIST ?= 0
+ifneq ($(EIP7702_TEST_WHITELIST),0)
+    DEFINES += HAVE_EIP7702_WHITELIST_TEST
+endif
+
+ifneq ($(DEBUG), 0)
+    MEMORY_PROFILING ?= 0
+    ifneq ($(MEMORY_PROFILING),0)
+        DEFINES += HAVE_MEMORY_PROFILING
     endif
 endif
 

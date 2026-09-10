@@ -1,0 +1,46 @@
+#include "ui_nbgl.h"
+#include "ui_icons.h"
+#include "common_ui.h"
+#include "ui_utils.h"
+
+static void reviewChoice(bool confirm) {
+    if (confirm) {
+        io_seproxyhal_touch_privacy_ok();
+    } else {
+        io_seproxyhal_touch_privacy_cancel();
+    }
+    ui_pairs_cleanup();
+}
+
+static void buildFirstPage(const char *review_string) {
+    // Initialize the buffers
+    if (!ui_pairs_init(2)) {
+        // Initialization failed, cleanup and return
+        return;
+    }
+
+    g_pairs[0].item = "Address";
+    g_pairs[0].value = strings.common.toAddress;
+    g_pairs[1].item = "Key";
+    g_pairs[1].value = strings.common.fullAmount;
+
+    nbgl_useCaseReview(TYPE_OPERATION,
+                       g_pairsList,
+                       get_tx_icon(false),
+                       review_string,
+                       NULL,
+                       review_string,
+                       reviewChoice);
+}
+
+void ui_display_privacy_public_key(void) {
+    buildFirstPage("Provide public\nprivacy key");
+}
+
+void ui_display_privacy_shared_secret(void) {
+    // The value released here is the X25519 shared secret derived from the
+    // device-held private key and the host-supplied peer public key — it is
+    // NOT a public value. Wording must make that clear so the user does not
+    // approve secret disclosure thinking it is a public-key export.
+    buildFirstPage("Provide derived\nshared secret");
+}
