@@ -3,7 +3,9 @@
 #include "offsets.h"
 #include "shared_context.h"
 #include "status_words.h"
-#include "parser.h"
+// Fully qualified: an embedding app may ship its own parser.h that would
+// otherwise shadow the SDK header defining command_t.
+#include "lib_standard_app/parser.h"
 
 #define APP_FLAG_DATA_ALLOWED          0x01
 #define APP_FLAG_EXTERNAL_TOKEN_NEEDED 0x02
