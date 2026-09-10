@@ -112,11 +112,13 @@ bool ui_712_start(e_eip712_filtering_mode filtering) {
 #ifdef HAVE_NBGL
     // The review warning banner is an NBGL-only concept.
     memset(&warning, 0, sizeof(nbgl_warning_t));
-#endif
     if (filtering == EIP712_FILTERING_BASIC) {
         // If the user has requested a filtered view, we will not show the warning
         warning.predefinedSet |= SET_BIT(BLIND_SIGNING_WARN);
         warning.predefinedSet |= SET_BIT(GATED_SIGNING_WARN);
     }
+#else
+    UNUSED(filtering);
+#endif
     return true;
 }
