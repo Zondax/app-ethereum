@@ -31,24 +31,28 @@
 // Index of the pair currently on screen.
 static uint8_t s_pair_idx;
 
+// bnnn_paging binds its title and text to fixed addresses at declaration, so
+// the pair being shown has to be copied into buffers rather than pointed at.
+// The value reuses the shared scratch buffer; the tag needs one of its own,
+// since strDataTmp_t no longer carries a second field.
+#define PAIR_TITLE_SIZE 64
+static char s_pair_title[PAIR_TITLE_SIZE];
+
 /**
- * Copy the current pair into the shared string buffers the paging step reads.
- *
- * bnnn_paging captures the buffer addresses when the step is declared, so the
- * text cannot simply point into g_pairs.
+ * Copy the current pair into the buffers the paging step reads.
  */
 static void prepare_pair(void) {
     const nbgl_contentTagValue_t *pair;
 
     strings.tmp.tmp[0] = '\0';
-    strings.tmp.tmp2[0] = '\0';
+    s_pair_title[0] = '\0';
     if ((g_pairsList == NULL) || (g_pairsList->pairs == NULL) ||
         (s_pair_idx >= g_pairsList->nbPairs)) {
         return;
     }
     pair = &g_pairsList->pairs[s_pair_idx];
     if (pair->item != NULL) {
-        strlcpy(strings.tmp.tmp2, pair->item, sizeof(strings.tmp.tmp2));
+        strlcpy(s_pair_title, pair->item, sizeof(s_pair_title));
     }
     if (pair->value != NULL) {
         strlcpy(strings.tmp.tmp, pair->value, sizeof(strings.tmp.tmp));
@@ -87,7 +91,7 @@ UX_STEP_NOCB_INIT(
     bnnn_paging,
     prepare_pair(),
     {
-      .title = strings.tmp.tmp2,
+      .title = s_pair_title,
       .text = strings.tmp.tmp,
     });
 UX_STEP_INIT(
