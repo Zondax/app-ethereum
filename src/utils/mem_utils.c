@@ -3,7 +3,12 @@
 #include "app_mem_utils.h"
 #include "mem_utils.h"
 
+// Overridable so an embedding app can trade review capacity against RAM.
+// Nano devices in particular have little to spare once the host app's own
+// state is linked in.
+#ifndef SIZE_MEM_BUFFER
 #define SIZE_MEM_BUFFER (1024 * 16)
+#endif
 
 static uint8_t mem_buffer[SIZE_MEM_BUFFER] __attribute__((aligned(sizeof(intmax_t))));
 
